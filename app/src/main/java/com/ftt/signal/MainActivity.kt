@@ -1,190 +1,137 @@
 package com.ftt.signal
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.graphics.Color
-import android.os.Build
 import android.os.Bundle
-import android.view.View
-import android.view.WindowManager
-import android.webkit.ConsoleMessage
-import android.webkit.PermissionRequest
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.widget.TextView
-import androidx.activity.OnBackPressedCallback
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.compose.*
+import com.ftt.signal.ui.screens.HistoryScreen
+import com.ftt.signal.ui.screens.SignalScreen
+import com.ftt.signal.ui.theme.*
+import com.ftt.signal.viewmodel.SignalViewModel
 
-class MainActivity : AppCompatActivity() {
-
-    private lateinit var webView: WebView
-    private lateinit var loadingView: View
-    private lateinit var loadingLabel: TextView
-    private var initialPageLoaded = false
-
-    private val notifPermLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        webView.post {
-            webView.evaluateJavascript(
-                "if(typeof window.onNotifPermResult==='function') window.onNotifPermResult($granted);",
-                null
-            )
-        }
-    }
-
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            FttsTheme {
+                FttsApp()
+            }
+        }
+    }
+}
 
-        window.apply {
-            setFlags(
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
-            )
-            statusBarColor = Color.TRANSPARENT
-            navigationBarColor = Color.TRANSPARENT
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                setDecorFitsSystemWindows(false)
-            } else {
-                @Suppress("DEPRECATION")
-                decorView.systemUiVisibility = (
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                        or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                        or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+// ── Navigation destinations ───────────────────────────────────
+sealed class Screen(val route: String, val label: String, val icon: String) {
+    object Signal  : Screen("signal",  "Signal",  "📊")
+    object History : Screen("history", "History", "📈")
+}
+
+private val navItems = listOf(Screen.Signal, Screen.History)
+
+@Composable
+fun FttsApp() {
+    val navController = rememberNavController()
+    val viewModel: SignalViewModel = viewModel()
+
+    val signalState  by viewModel.signalState.collectAsStateWithLifecycle()
+    val historyState by viewModel.historyState.collectAsStateWithLifecycle()
+    val selectedPair by viewModel.selectedPair.collectAsStateWithLifecycle()
+
+    Scaffold(
+        containerColor = Background,
+        bottomBar = {
+            FttsBottomBar(navController = navController)
+        },
+    ) { innerPadding ->
+        NavHost(
+            navController    = navController,
+            startDestination = Screen.Signal.route,
+            modifier         = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            composable(Screen.Signal.route) {
+                SignalScreen(
+                    uiState      = signalState,
+                    selectedPair = selectedPair,
+                    onPairSelect = { pair ->
+                        viewModel.selectPair(pair)
+                    },
+                    onRefresh    = { viewModel.fetchSignal() },
+                    onToggleAuto = { viewModel.toggleAutoRefresh() },
+                )
+            }
+
+            composable(Screen.History.route) {
+                HistoryScreen(
+                    uiState      = historyState,
+                    selectedPair = selectedPair,
+                    onRefresh    = { viewModel.fetchHistory() },
+                    onReport     = { id, result -> viewModel.reportResult(id, result) },
                 )
             }
         }
-
-        setContentView(R.layout.activity_main)
-        webView = findViewById(R.id.webView)
-        loadingView = findViewById(R.id.loadingContainer)
-        loadingLabel = findViewById(R.id.loadingLabel)
-
-        setupWebView()
-        setupBackPress()
-        requestNotifIfNeeded()
-        showLoading(getString(R.string.loading_message))
-
-        webView.loadUrl("file:///android_asset/app.html")
     }
+}
 
-    @Suppress("SetJavaScriptEnabled")
-    private fun setupWebView() {
-        webView.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true
-            databaseEnabled = true
-            allowFileAccess = true
-            allowContentAccess = true
-            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-            cacheMode = WebSettings.LOAD_DEFAULT
-            useWideViewPort = true
-            loadWithOverviewMode = true
-            mediaPlaybackRequiresUserGesture = false
-            javaScriptCanOpenWindowsAutomatically = true
-            setSupportZoom(false)
-            builtInZoomControls = false
-            displayZoomControls = false
+// ── Bottom Navigation Bar ─────────────────────────────────────
+@Composable
+private fun FttsBottomBar(navController: androidx.navigation.NavController) {
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+
+    NavigationBar(
+        containerColor = Surface,
+        tonalElevation = 0.dp,
+        modifier       = Modifier.height(64.dp),
+    ) {
+        navItems.forEach { screen ->
+            val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
+
+            NavigationBarItem(
+                selected = selected,
+                onClick  = {
+                    navController.navigate(screen.route) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState    = true
+                    }
+                },
+                icon = {
+                    Text(screen.icon, fontSize = 20.sp)
+                },
+                label = {
+                    Text(
+                        screen.label,
+                        fontSize   = 11.sp,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor   = Accent,
+                    selectedTextColor   = Accent,
+                    unselectedIconColor = TextMuted,
+                    unselectedTextColor = TextMuted,
+                    indicatorColor      = AccentDim,
+                ),
+            )
         }
-
-        webView.addJavascriptInterface(JsBridge(this), "AndroidBridge")
-        webView.setBackgroundColor(Color.TRANSPARENT)
-
-        webView.webViewClient = object : WebViewClient() {
-            override fun shouldOverrideUrlLoading(
-                view: WebView,
-                request: WebResourceRequest
-            ): Boolean = false
-
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                if (!initialPageLoaded) {
-                    initialPageLoaded = true
-                    hideLoading()
-                }
-            }
-
-            override fun onReceivedError(
-                view: WebView?,
-                request: WebResourceRequest?,
-                error: WebResourceError?
-            ) {
-                super.onReceivedError(view, request, error)
-                if (request?.isForMainFrame == true && !initialPageLoaded) {
-                    showLoading(getString(R.string.loading_retry_message))
-                    webView.postDelayed({ webView.reload() }, 1200)
-                }
-            }
-        }
-
-        webView.webChromeClient = object : WebChromeClient() {
-            override fun onPermissionRequest(request: PermissionRequest?) {
-                request?.grant(request.resources)
-            }
-
-            override fun onConsoleMessage(msg: ConsoleMessage?): Boolean {
-                return true
-            }
-        }
-    }
-
-    private fun setupBackPress() {
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (webView.canGoBack()) {
-                    webView.goBack()
-                } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
-                }
-            }
-        })
-    }
-
-    private fun showLoading(message: String) {
-        loadingLabel.text = message
-        loadingView.visibility = View.VISIBLE
-        webView.alpha = 0f
-    }
-
-    private fun hideLoading() {
-        loadingView.animate().alpha(0f).setDuration(220).withEndAction {
-            loadingView.visibility = View.GONE
-            loadingView.alpha = 1f
-        }.start()
-        webView.animate().alpha(1f).setDuration(220).start()
-    }
-
-    fun requestNotifPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            notifPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-
-    private fun requestNotifIfNeeded() {
-        requestNotifPermission()
-    }
-
-    override fun onResume() {
-        super.onResume()
-        webView.onResume()
-    }
-
-    override fun onPause() {
-        webView.onPause()
-        super.onPause()
-    }
-
-    override fun onDestroy() {
-        webView.destroy()
-        super.onDestroy()
     }
 }

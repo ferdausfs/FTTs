@@ -1,61 +1,78 @@
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
-    namespace = "com.ftt.signal"
+    namespace  = "com.ftt.signal"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.ftt.signal"
-        minSdk = 24
-        targetSdk = 34
-        versionCode = 1
-        versionName = "6.5.0"
-    }
+        applicationId   = "com.ftt.signal"
+        minSdk          = 26
+        targetSdk       = 34
+        versionCode     = 1
+        versionName     = "1.0.0"
 
-    signingConfigs {
-        create("release") {
-            val ksPath = System.getenv("KEYSTORE_PATH")
-            if (ksPath != null && file(ksPath).exists()) {
-                storeFile = file(ksPath)
-                storePassword = System.getenv("KEYSTORE_PASS") ?: ""
-                keyAlias = System.getenv("KEY_ALIAS") ?: ""
-                keyPassword = System.getenv("KEY_PASS") ?: ""
-            }
-        }
+        // Worker base URL — change here or override via BuildConfig
+        buildConfigField("String", "WORKER_BASE_URL",
+            "\"https://fttotcv6.umuhammadiswa.workers.dev\"")
     }
 
     buildTypes {
-        release {
+        debug {
+            isDebuggable    = true
             isMinifyEnabled = false
-            val ksPath = System.getenv("KEYSTORE_PATH")
-            if (ksPath != null && file(ksPath).exists()) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            applicationIdSuffix = ".debug"
+            versionNameSuffix   = "-debug"
+        }
+        release {
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
-        debug {
-            applicationIdSuffix = ".debug"
-        }
+    }
+
+    buildFeatures {
+        compose     = true
+        buildConfig = true
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
+
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
+    }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
     }
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.lifecycle.runtime)
+    implementation(libs.androidx.lifecycle.viewmodel)
+    implementation(libs.androidx.activity.compose)
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.ui.graphics)
+    implementation(libs.compose.ui.tooling.preview)
+    implementation(libs.compose.material3)
+    implementation(libs.navigation.compose)
+    implementation(libs.retrofit.core)
+    implementation(libs.retrofit.gson)
+    implementation(libs.okhttp.logging)
+    implementation(libs.coroutines.android)
+    implementation(libs.datastore.prefs)
+    debugImplementation(libs.compose.ui.tooling)
 }

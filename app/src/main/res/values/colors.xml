@@ -1,14 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ftt_bg">#070B14</color>
-    <color name="ftt_surface">#111827</color>
-    <color name="ftt_surface_2">#0F172A</color>
-    <color name="ftt_primary">#4776E6</color>
-    <color name="ftt_primary_dark">#3157C9</color>
-    <color name="ftt_secondary">#8E54E9</color>
-    <color name="ftt_text">#EEF3FF</color>
-    <color name="ftt_text_muted">#9FB0D9</color>
-    <color name="ftt_nav">#0A1020</color>
-    <color name="ftt_black">#000000</color>
-    <color name="ftt_white">#FFFFFF</color>
+    <color name="ic_launcher_background">#161A23</color>
 </resources>

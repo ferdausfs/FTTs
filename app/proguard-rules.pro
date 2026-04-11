@@ -1,4 +1,8 @@
--keep class com.ftt.signal.JsBridge { *; }
--keepclassmembers class com.ftt.signal.JsBridge {
-    @android.webkit.JavascriptInterface <methods>;
-}
+-keep class com.ftt.signal.data.model.** { *; }
+-keepclassmembers class com.ftt.signal.data.model.** { *; }
+-keep class retrofit2.** { *; }
+-keep interface retrofit2.** { *; }
+-keepattributes Signature
+-keepattributes Exceptions
+-dontwarn okhttp3.**
+-dontwarn okio.**
