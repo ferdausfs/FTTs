@@ -1,20 +1,21 @@
 package com.ftt.signal
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.background
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -26,8 +27,22 @@ import com.ftt.signal.ui.theme.*
 import com.ftt.signal.viewmodel.SignalViewModel
 
 class MainActivity : ComponentActivity() {
+
+    private val requestNotificationPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* silent */ }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
         enableEdgeToEdge()
         setContent {
             FttsTheme {
@@ -37,7 +52,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// ── Navigation destinations ───────────────────────────────────
 sealed class Screen(val route: String, val label: String, val icon: String) {
     object Signal  : Screen("signal",  "Signal",  "📊")
     object History : Screen("history", "History", "📈")
@@ -56,29 +70,22 @@ fun FttsApp() {
 
     Scaffold(
         containerColor = Background,
-        bottomBar = {
-            FttsBottomBar(navController = navController)
-        },
+        bottomBar = { FttsBottomBar(navController = navController) },
     ) { innerPadding ->
         NavHost(
             navController    = navController,
             startDestination = Screen.Signal.route,
-            modifier         = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
+            modifier         = Modifier.fillMaxSize().padding(innerPadding),
         ) {
             composable(Screen.Signal.route) {
                 SignalScreen(
                     uiState      = signalState,
                     selectedPair = selectedPair,
-                    onPairSelect = { pair ->
-                        viewModel.selectPair(pair)
-                    },
+                    onPairSelect = { pair -> viewModel.selectPair(pair) },
                     onRefresh    = { viewModel.fetchSignal() },
                     onToggleAuto = { viewModel.toggleAutoRefresh() },
                 )
             }
-
             composable(Screen.History.route) {
                 HistoryScreen(
                     uiState      = historyState,
@@ -91,10 +98,9 @@ fun FttsApp() {
     }
 }
 
-// ── Bottom Navigation Bar ─────────────────────────────────────
 @Composable
 private fun FttsBottomBar(navController: androidx.navigation.NavController) {
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val navBackStackEntry  by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
     NavigationBar(
@@ -104,7 +110,6 @@ private fun FttsBottomBar(navController: androidx.navigation.NavController) {
     ) {
         navItems.forEach { screen ->
             val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
-
             NavigationBarItem(
                 selected = selected,
                 onClick  = {
@@ -114,9 +119,7 @@ private fun FttsBottomBar(navController: androidx.navigation.NavController) {
                         restoreState    = true
                     }
                 },
-                icon = {
-                    Text(screen.icon, fontSize = 20.sp)
-                },
+                icon  = { Text(screen.icon, fontSize = 20.sp) },
                 label = {
                     Text(
                         screen.label,
