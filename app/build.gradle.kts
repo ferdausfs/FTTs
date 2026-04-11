@@ -15,7 +15,6 @@ android {
         versionCode     = 1
         versionName     = "1.0.0"
 
-        // Worker base URL — change here or override via BuildConfig
         buildConfigField("String", "WORKER_BASE_URL",
             "\"https://fttotcv6.umuhammadiswa.workers.dev\"")
     }
@@ -61,6 +60,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime)
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation(libs.androidx.lifecycle.viewmodel)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.compose.bom))
