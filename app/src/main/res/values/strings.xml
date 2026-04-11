@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">FTTs</string>
+    <string name="app_name">FTT Signal</string>
+    <string name="loading_message">Preparing trading dashboard…</string>
+    <string name="loading_subtitle">Professional signal monitoring with background scan and instant alerts</string>
+    <string name="loading_retry_message">Reloading dashboard…</string>
 </resources>

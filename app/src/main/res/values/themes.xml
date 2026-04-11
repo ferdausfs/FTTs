@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.FTTs" parent="android:Theme.Material.NoTitleBar">
-        <item name="android:windowBackground">#0D0F14</item>
-        <item name="android:statusBarColor">#0D0F14</item>
-        <item name="android:navigationBarColor">#161A23</item>
-        <item name="android:windowLightStatusBar">false</item>
+    <style name="Theme.FttSignal" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/ftt_nav</item>
+        <item name="android:windowBackground">@drawable/bg_window</item>
+        <item name="colorPrimary">@color/ftt_primary</item>
+        <item name="colorPrimaryDark">@color/ftt_primary_dark</item>
+        <item name="colorAccent">@color/ftt_secondary</item>
     </style>
 </resources>
