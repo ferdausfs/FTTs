@@ -29,6 +29,9 @@ jobs:
           gradle-version: "8.7"
           validate-wrappers: false
 
+      - name: Generate Gradle Wrapper JAR
+        run: gradle wrapper --gradle-version 8.7 --distribution-type bin
+
       - name: Make gradlew executable
         run: chmod +x gradlew
 
