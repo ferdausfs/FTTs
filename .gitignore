@@ -1,27 +1,8 @@
-# Built files
 *.apk
 *.aab
-*.aar
-*.class
-*.dex
-
-# Build directories
 build/
 .gradle/
-captures/
-.externalNativeBuild/
-.cxx/
-
-# IDE
 .idea/
 *.iml
-*.iws
 local.properties
-
-# Keystore — never commit
-*.jks
-*.keystore
-
-# OS
 .DS_Store
-Thumbs.db

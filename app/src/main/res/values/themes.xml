@@ -1,16 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.FTTs" parent="Theme.AppCompat.DayNight.NoActionBar">
-        <item name="android:windowBackground">#0D0F14</item>
-        <item name="android:statusBarColor">#0D0F14</item>
-        <item name="android:navigationBarColor">#161A23</item>
+    <style name="Theme.FTTSignal" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#000000</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
-
-    <style name="Theme.FTTs.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">#0D0F14</item>
+    <style name="Theme.FTTSignal.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#000000</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
-        <item name="windowSplashScreenIconBackgroundColor">#161A23</item>
-        <item name="postSplashScreenTheme">@style/Theme.FTTs</item>
+        <item name="windowSplashScreenIconBackgroundColor">#1A1A2E</item>
+        <item name="postSplashScreenTheme">@style/Theme.FTTSignal</item>
     </style>
 </resources>

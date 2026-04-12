@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -11,130 +12,163 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
-import com.ftt.signal.ui.screens.HistoryScreen
-import com.ftt.signal.ui.screens.SignalScreen
+import com.ftt.signal.ui.components.PairPickerSheet
+import com.ftt.signal.ui.screens.*
 import com.ftt.signal.ui.theme.*
-import com.ftt.signal.viewmodel.SignalViewModel
+import com.ftt.signal.viewmodel.*
 
 class MainActivity : ComponentActivity() {
-
-    private val requestNotificationPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* silent */ }
+    private val reqNotif = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) reqNotif.launch(Manifest.permission.POST_NOTIFICATIONS)
 
         enableEdgeToEdge()
+
+        val sigVm = ViewModelProvider(this)[SignalViewModel::class.java]
+        val jrnVm = ViewModelProvider(this)[JournalViewModel::class.java]
+        val wlVm  = ViewModelProvider(this)[WatchlistViewModel::class.java]
+        val notif = NotificationHelper(this)
+
         setContent {
-            FttsTheme {
-                FttsApp()
-            }
+            FttTheme { FttApp(sigVm, jrnVm, wlVm, notif) }
         }
     }
 }
 
-sealed class Screen(val route: String, val label: String, val icon: String) {
-    object Signal  : Screen("signal",  "Signal",  "📊")
-    object History : Screen("history", "History", "📈")
-}
-
-private val navItems = listOf(Screen.Signal, Screen.History)
-
 @Composable
-fun FttsApp() {
-    val navController = rememberNavController()
-    val viewModel: SignalViewModel = viewModel()
+fun FttApp(sigVm: SignalViewModel, jrnVm: JournalViewModel, wlVm: WatchlistViewModel, notif: NotificationHelper) {
+    val nav         = rememberNavController()
+    val sigState    by sigVm.state.collectAsStateWithLifecycle()
+    val curPair     by sigVm.curPair.collectAsStateWithLifecycle()
+    val soundOn     by sigVm.soundOn.collectAsStateWithLifecycle()
+    val slPips      by sigVm.slPips.collectAsStateWithLifecycle()
+    val tpPips      by sigVm.tpPips.collectAsStateWithLifecycle()
+    val apiBase     by sigVm.apiBase.collectAsStateWithLifecycle()
+    val otcBase     by sigVm.otcApiBase.collectAsStateWithLifecycle()
+    val journals    by jrnVm.allEntries.collectAsStateWithLifecycle()
+    val wlState     by wlVm.state.collectAsStateWithLifecycle()
+    val prefs       = remember { com.ftt.signal.prefs.AppPrefs(sigVm.getApplication()) }
+    val lotSize     by prefs.lotSize.collectAsStateWithLifecycle(initialValue = 0.1f)
+    val pipValue    by prefs.pipValue.collectAsStateWithLifecycle(initialValue = 10f)
+    var showPicker  by remember { mutableStateOf(false) }
 
-    val signalState  by viewModel.signalState.collectAsStateWithLifecycle()
-    val historyState by viewModel.historyState.collectAsStateWithLifecycle()
-    val selectedPair by viewModel.selectedPair.collectAsStateWithLifecycle()
+    val tabs = listOf("signal" to "📊", "tf" to "📐", "journal" to "📓",
+                      "watchlist" to "👁", "analytics" to "📈")
+
+    // Notify on new signal
+    LaunchedEffect(sigState.signal?.timestamp) {
+        val sig = sigState.signal ?: return@LaunchedEffect
+        if (!sigState.isCached && (sig.label == "BUY" || sig.label == "SELL"))
+            notif.notifySignal(sig.symbol, sig.label, sig.grade)
+    }
 
     Scaffold(
-        containerColor = Background,
-        bottomBar = { FttsBottomBar(navController = navController) },
-    ) { innerPadding ->
-        NavHost(
-            navController    = navController,
-            startDestination = Screen.Signal.route,
-            modifier         = Modifier.fillMaxSize().padding(innerPadding),
-        ) {
-            composable(Screen.Signal.route) {
-                SignalScreen(
-                    uiState      = signalState,
-                    selectedPair = selectedPair,
-                    onPairSelect = { pair -> viewModel.selectPair(pair) },
-                    onRefresh    = { viewModel.fetchSignal() },
-                    onToggleAuto = { viewModel.toggleAutoRefresh() },
-                )
-            }
-            composable(Screen.History.route) {
-                HistoryScreen(
-                    uiState      = historyState,
-                    selectedPair = selectedPair,
-                    onRefresh    = { viewModel.fetchHistory() },
-                    onReport     = { id, result -> viewModel.reportResult(id, result) },
-                )
+        containerColor = Bg,
+        bottomBar = {
+            NavigationBar(containerColor = S2, tonalElevation = 0.dp, modifier = Modifier.height(64.dp)) {
+                val back by nav.currentBackStackEntryAsState()
+                val cur  = back?.destination
+                tabs.forEach { (route, icon) ->
+                    val sel   = cur?.hierarchy?.any { it.route == route } == true
+                    val label = route.replaceFirstChar { it.uppercase() }
+                    val badge = if (route == "watchlist" && wlState.newCount > 0) wlState.newCount else 0
+                    NavigationBarItem(
+                        selected = sel,
+                        onClick  = {
+                            nav.navigate(route) {
+                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true; restoreState = true
+                            }
+                        },
+                        icon  = {
+                            BadgedBox(badge = { if (badge > 0) Badge { Text("$badge", fontSize = 8.sp) } }) {
+                                Text(icon, fontSize = 18.sp)
+                            }
+                        },
+                        label  = { Text(label, fontSize = 10.sp,
+                            fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Accent, selectedTextColor = Accent,
+                            unselectedIconColor = T3, unselectedTextColor = T3,
+                            indicatorColor = AccentDim),
+                    )
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun FttsBottomBar(navController: androidx.navigation.NavController) {
-    val navBackStackEntry  by navController.currentBackStackEntryAsState()
-    val currentDestination = navBackStackEntry?.destination
-
-    NavigationBar(
-        containerColor = Surface,
-        tonalElevation = 0.dp,
-        modifier       = Modifier.height(64.dp),
-    ) {
-        navItems.forEach { screen ->
-            val selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true
-            NavigationBarItem(
-                selected = selected,
-                onClick  = {
-                    navController.navigate(screen.route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState    = true
-                    }
-                },
-                icon  = { Text(screen.icon, fontSize = 20.sp) },
-                label = {
-                    Text(
-                        screen.label,
-                        fontSize   = 11.sp,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+    ) { pad ->
+        Box(Modifier.fillMaxSize().padding(pad)) {
+            NavHost(nav, startDestination = "signal") {
+                composable("signal") {
+                    SignalScreen(
+                        state = sigState, curPair = curPair, slPips = slPips, tpPips = tpPips,
+                        soundOn = soundOn,
+                        onRefresh = { sigVm.fetchSignal(forceRefresh = true) },
+                        onToggleSound = sigVm::toggleSound,
+                        onSaveSLTP = sigVm::saveSLTP,
+                        onOpenSettings = { nav.navigate("settings") },
+                        calcSLTP = sigVm::calcSLTP,
                     )
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor   = Accent,
-                    selectedTextColor   = Accent,
-                    unselectedIconColor = TextMuted,
-                    unselectedTextColor = TextMuted,
-                    indicatorColor      = AccentDim,
-                ),
-            )
+                }
+                composable("tf")        { TfScreen(signal = sigState.signal) }
+                composable("journal")   {
+                    JournalScreen(journals, jrnVm::markResult, jrnVm::delete, jrnVm::saveNote, jrnVm::clearAll)
+                }
+                composable("watchlist") {
+                    WatchlistScreen(
+                        state = wlState, onToggleScan = wlVm::toggleScan, onRunScan = wlVm::runScan,
+                        onAddPair = wlVm::addPair, onRemovePair = wlVm::removePair,
+                        onSetInterval = wlVm::setInterval, onSetFilter = wlVm::setFilter,
+                        onSetSort = wlVm::setSort,
+                        onPairClick = { pair ->
+                            sigVm.selectPair(pair)
+                            nav.navigate("signal") {
+                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true; restoreState = true
+                            }
+                        },
+                        onAddToJournal = wlVm::addToJournal,
+                        onClearNewCount = wlVm::clearNewCount,
+                    )
+                }
+                composable("analytics") {
+                    AnalyticsScreen(
+                        entries = journals, lotSize = lotSize, pipValue = pipValue,
+                        onSavePL = { lot, pip ->
+                            sigVm.viewModelScope.launch {
+                                prefs.set(com.ftt.signal.prefs.AppPrefs.LOT_SIZE, lot)
+                                prefs.set(com.ftt.signal.prefs.AppPrefs.PIP_VALUE, pip)
+                            }
+                        },
+                    )
+                }
+                composable("settings") {
+                    SettingsScreen(apiBase = apiBase, otcApiBase = otcBase, onSave = sigVm::saveApiSettings)
+                }
+            }
+
+            if (showPicker) {
+                PairPickerSheet(currentPair = curPair, onSelect = { sigVm.selectPair(it) }, onDismiss = { showPicker = false })
+            }
         }
     }
 }

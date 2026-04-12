@@ -1,124 +1,154 @@
 package com.ftt.signal.viewmodel
 
 import android.app.Application
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
-import com.ftt.signal.NotificationHelper
+import androidx.lifecycle.*
 import com.ftt.signal.data.model.*
 import com.ftt.signal.data.repository.Result
 import com.ftt.signal.data.repository.SignalRepository
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
+import com.ftt.signal.db.AppDatabase
+import com.ftt.signal.db.JournalEntry
+import com.ftt.signal.prefs.AppPrefs
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 
 data class SignalUiState(
-    val isLoading:      Boolean        = false,
-    val signalResponse: SignalResponse? = null,
-    val error:          String?         = null,
-    val lastUpdated:    String?         = null,
-    val autoRefresh:    Boolean         = true,
-)
-
-data class HistoryUiState(
-    val isLoading: Boolean         = false,
-    val history:   HistoryResponse? = null,
-    val stats:     StatsResponse?   = null,
-    val error:     String?          = null,
+    val isLoading:   Boolean          = false,
+    val signal:      ProcessedSignal?  = null,
+    val prevSignal:  ProcessedSignal?  = null,
+    val error:       String?           = null,
+    val isCached:    Boolean           = false,
+    val lastUpdated: String?           = null,
+    val autoRefresh: Boolean           = true,
+    val isOpen:      Boolean           = true,
+    val closedReason:String            = "",
+    val confHistory: List<Pair<Int, String>> = emptyList(),
 )
 
 class SignalViewModel(application: Application) : AndroidViewModel(application) {
+    private val repo    = SignalRepository()
+    private val prefs   = AppPrefs(application)
+    private val dao     = AppDatabase.get(application).journalDao()
 
-    private val repository         = SignalRepository()
-    private val notificationHelper = NotificationHelper(application)
-    private var lastNotifiedKey: String? = null
+    private val _state = MutableStateFlow(SignalUiState())
+    val state: StateFlow<SignalUiState> = _state.asStateFlow()
 
-    private val _signalState = MutableStateFlow(SignalUiState())
-    val signalState: StateFlow<SignalUiState> = _signalState.asStateFlow()
+    val curPair    = prefs.curPair.stateIn(viewModelScope, SharingStarted.Eagerly, "EUR/USD")
+    val soundOn    = prefs.soundOn.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val slPips     = prefs.slPips.stateIn(viewModelScope, SharingStarted.Eagerly, 15f)
+    val tpPips     = prefs.tpPips.stateIn(viewModelScope, SharingStarted.Eagerly, 30f)
+    val apiBase    = prefs.apiBase.stateIn(viewModelScope, SharingStarted.Eagerly, AppPrefs.DEFAULT_API)
+    val otcApiBase = prefs.otcApiBase.stateIn(viewModelScope, SharingStarted.Eagerly, AppPrefs.DEFAULT_OTC_API)
 
-    private val _historyState = MutableStateFlow(HistoryUiState())
-    val historyState: StateFlow<HistoryUiState> = _historyState.asStateFlow()
-
-    private val _selectedPair = MutableStateFlow("EUR/USD")
-    val selectedPair: StateFlow<String> = _selectedPair.asStateFlow()
-
+    // Session-level cache
+    private val signalCache   = mutableMapOf<String, ProcessedSignal>()
+    private val cacheExpiry   = mutableMapOf<String, Long>()
     private var autoRefreshJob: Job? = null
 
     init { startAutoRefresh() }
 
     fun selectPair(pair: String) {
-        _selectedPair.value = pair
-        fetchSignal(pair)
-        fetchHistory(pair)
+        viewModelScope.launch {
+            prefs.set(AppPrefs.CUR_PAIR, pair)
+            fetchSignal(pair, forceRefresh = false)
+        }
     }
 
-    fun fetchSignal(pair: String = _selectedPair.value, isAutoRefresh: Boolean = false) {
+    fun fetchSignal(pair: String = curPair.value, forceRefresh: Boolean = false) {
         viewModelScope.launch {
-            _signalState.value = _signalState.value.copy(isLoading = true, error = null)
-            when (val result = repository.getSignal(pair)) {
+            // Check if market is open
+            if (!repo.isMarketOpen(pair)) {
+                _state.update { it.copy(
+                    isLoading = false, isOpen = false,
+                    closedReason = repo.whyClosed(pair)
+                )}
+                return@launch
+            }
+
+            // Check cache
+            val cached     = signalCache[pair]
+            val expiry     = cacheExpiry[pair] ?: 0L
+            val isCacheOk  = !forceRefresh && cached != null && System.currentTimeMillis() < expiry
+
+            if (isCacheOk && cached != null) {
+                _state.update { it.copy(
+                    isLoading = false, signal = cached, isCached = true, isOpen = true,
+                    error = null
+                )}
+                return@launch
+            }
+
+            _state.update { it.copy(isLoading = true, isOpen = true, error = null) }
+
+            when (val result = repo.getSignal(pair, apiBase.value, otcApiBase.value)) {
                 is Result.Success -> {
-                    val response  = result.data
-                    val direction = response.signal?.finalSignal ?: ""
-                    val grade     = response.signal?.confidence ?: ""
+                    val sig       = result.data
+                    val prev      = signalCache[pair]
+                    val isNew     = prev?.timestamp != sig.timestamp
+                    val expMin    = sig.expiryMinutes
+                    signalCache[pair]  = sig
+                    cacheExpiry[pair]  = System.currentTimeMillis() + expMin * 60_000L
 
-                    _signalState.value = _signalState.value.copy(
-                        isLoading      = false,
-                        signalResponse = response,
-                        lastUpdated    = java.text.SimpleDateFormat(
-                            "HH:mm:ss", java.util.Locale.getDefault()
-                        ).format(java.util.Date()),
-                    )
+                    val newHist = (_state.value.confHistory + (sig.confidence to sig.label))
+                        .takeLast(8)
 
-                    if (isAutoRefresh && direction.uppercase() in listOf("BUY", "SELL")) {
-                        val notifKey = "${response.pair}:$direction:$grade"
-                        if (notifKey != lastNotifiedKey) {
-                            lastNotifiedKey = notifKey
-                            notificationHelper.sendSignalNotification(
-                                pair      = response.pair ?: pair,
-                                direction = direction,
-                                grade     = grade,
-                            )
-                        }
+                    _state.update { it.copy(
+                        isLoading   = false, signal = sig, prevSignal = if (isNew) prev else it.prevSignal,
+                        isCached    = false, error = null, isOpen = true,
+                        lastUpdated = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date()),
+                        confHistory = newHist,
+                    )}
+
+                    // Auto-save to journal if new BUY/SELL
+                    if (isNew && (sig.label == "BUY" || sig.label == "SELL")) {
+                        saveToJournal(sig)
                     }
                 }
-                is Result.Error -> _signalState.value = _signalState.value.copy(
-                    isLoading = false,
-                    error     = result.message,
-                )
-                else -> {}
+                is Result.Error -> _state.update { it.copy(
+                    isLoading = false, error = result.message
+                )}
             }
         }
     }
 
-    fun fetchHistory(pair: String = _selectedPair.value) {
-        viewModelScope.launch {
-            _historyState.value = _historyState.value.copy(isLoading = true)
-            val histResult  = repository.getHistory(pair)
-            val statsResult = repository.getStats(pair)
-            _historyState.value = HistoryUiState(
-                isLoading = false,
-                history   = (histResult  as? Result.Success)?.data,
-                stats     = (statsResult as? Result.Success)?.data,
-                error     = (histResult  as? Result.Error)?.message,
-            )
-        }
-    }
-
-    fun reportResult(signalId: String, result: String) {
-        viewModelScope.launch {
-            repository.reportResult(signalId, result)
-            delay(500)
-            fetchHistory(_selectedPair.value)
-        }
+    private suspend fun saveToJournal(sig: ProcessedSignal) {
+        val entry = JournalEntry(
+            pair          = sig.rawPair,
+            dir           = sig.label,
+            conf          = sig.confidence,
+            grade         = sig.grade,
+            entryPrice    = sig.entryPrice,
+            exitPrice     = null,
+            pips          = null,
+            result        = "PENDING",
+            session       = sig.sessionLabel,
+            expiryMinutes = sig.expiryMinutes,
+            expiryAt      = System.currentTimeMillis() + sig.expiryMinutes * 60_000L,
+            timestamp     = System.currentTimeMillis(),
+        )
+        dao.insert(entry)
     }
 
     fun toggleAutoRefresh() {
-        val newState = !_signalState.value.autoRefresh
-        _signalState.value = _signalState.value.copy(autoRefresh = newState)
-        if (newState) startAutoRefresh() else autoRefreshJob?.cancel()
+        val new = !_state.value.autoRefresh
+        _state.update { it.copy(autoRefresh = new) }
+        if (new) startAutoRefresh() else autoRefreshJob?.cancel()
+    }
+
+    fun toggleSound() { viewModelScope.launch { prefs.set(AppPrefs.SOUND_ON, !soundOn.value) } }
+
+    fun saveSLTP(sl: Float, tp: Float) {
+        viewModelScope.launch {
+            prefs.set(AppPrefs.SL_PIPS, sl)
+            prefs.set(AppPrefs.TP_PIPS, tp)
+        }
+    }
+
+    fun saveApiSettings(api: String, otc: String) {
+        viewModelScope.launch {
+            prefs.set(AppPrefs.API_BASE, api.trim())
+            prefs.set(AppPrefs.OTC_API_BASE, otc.trim())
+            signalCache.clear(); cacheExpiry.clear()
+        }
     }
 
     private fun startAutoRefresh() {
@@ -126,13 +156,35 @@ class SignalViewModel(application: Application) : AndroidViewModel(application) 
         autoRefreshJob = viewModelScope.launch {
             while (isActive) {
                 delay(60_000L)
-                if (_signalState.value.autoRefresh) fetchSignal(isAutoRefresh = true)
+                if (_state.value.autoRefresh) fetchSignal(forceRefresh = false)
             }
         }
     }
 
-    override fun onCleared() {
-        super.onCleared()
-        autoRefreshJob?.cancel()
+    // SL/TP calc
+    fun calcSLTP(pair: String, dir: String, ep: Double, sl: Float, tp: Float): Triple<String, String, String> {
+        val ps = when {
+            "JPY" in pair -> 0.01
+            "XAU" in pair -> 0.1
+            "BTC" in pair -> 1.0
+            "ETH" in pair -> 0.1
+            PairData.isCrypto(pair) -> 0.01
+            else -> 0.0001
+        }
+        val slPrice = if (dir == "BUY") ep - sl * ps else ep + sl * ps
+        val tpPrice = if (dir == "BUY") ep + tp * ps else ep - tp * ps
+        val dec = when { "JPY" in pair -> 3; "XAU" in pair -> 2; "BTC" in pair -> 1; else -> 5 }
+        val fmt = "%.${dec}f"
+        val rr  = String.format("%.1f", tp / sl)
+        return Triple(String.format(fmt, slPrice), String.format(fmt, tpPrice), rr)
     }
+
+    override fun onCleared() { super.onCleared(); autoRefreshJob?.cancel() }
 }
+
+    fun saveLotPip(lot: Float, pip: Float) {
+        viewModelScope.launch {
+            prefs.set(AppPrefs.LOT_SIZE,  lot)
+            prefs.set(AppPrefs.PIP_VALUE, pip)
+        }
+    }
