@@ -20,7 +20,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
@@ -72,8 +71,8 @@ fun FttApp(sigVm: SignalViewModel, jrnVm: JournalViewModel, wlVm: WatchlistViewM
     val pipValue    by prefs.pipValue.collectAsStateWithLifecycle(initialValue = 10f)
     var showPicker  by remember { mutableStateOf(false) }
 
-    val tabs = listOf("signal" to "📊", "tf" to "📐", "journal" to "📓",
-                      "watchlist" to "👁", "analytics" to "📈")
+    val tabs = listOf("signal" to "\uD83D\uDCCA", "tf" to "\uD83D\uDCD0", "journal" to "\uD83D\uDCD3",
+                      "watchlist" to "\uD83D\uDC41", "analytics" to "\uD83D\uDCC8")
 
     // Notify on new signal
     LaunchedEffect(sigState.signal?.timestamp) {
@@ -153,12 +152,7 @@ fun FttApp(sigVm: SignalViewModel, jrnVm: JournalViewModel, wlVm: WatchlistViewM
                 composable("analytics") {
                     AnalyticsScreen(
                         entries = journals, lotSize = lotSize, pipValue = pipValue,
-                        onSavePL = { lot, pip ->
-                            sigVm.viewModelScope.launch {
-                                prefs.set(com.ftt.signal.prefs.AppPrefs.LOT_SIZE, lot)
-                                prefs.set(com.ftt.signal.prefs.AppPrefs.PIP_VALUE, pip)
-                            }
-                        },
+                        onSavePL = sigVm::saveLotPip // <-- THE FIX IS HERE
                     )
                 }
                 composable("settings") {
