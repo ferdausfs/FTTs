@@ -1,21 +1,44 @@
 package com.ftt.signal.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.*
-import com.ftt.signal.db.AppDatabase
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.ftt.signal.db.JournalEntry
-import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.*
+import com.ftt.signal.domain.usecase.GetJournalEntriesUseCase
+import com.ftt.signal.domain.usecase.UpdateJournalUseCase
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class JournalViewModel(application: Application) : AndroidViewModel(application) {
-    private val dao = AppDatabase.get(application).journalDao()
+/**
+ * ViewModel for the trade journal screen.
+ * Delegates all persistence to [UpdateJournalUseCase] — zero DB
+ * references in the ViewModel layer.
+ */
+@HiltViewModel
+class JournalViewModel @Inject constructor(
+    getJournalEntriesUseCase: GetJournalEntriesUseCase,
+    private val updateJournalUseCase: UpdateJournalUseCase,
+) : ViewModel() {
+
     val allEntries: StateFlow<List<JournalEntry>> =
-        dao.getAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        getJournalEntriesUseCase()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun markResult(id: Long, result: String) = viewModelScope.launch { dao.markResult(id, result) }
-    fun saveNote(id: Long, note: String)     = viewModelScope.launch { dao.saveNote(id, note) }
-    fun delete(id: Long)                     = viewModelScope.launch { dao.delete(id) }
-    fun clearAll()                           = viewModelScope.launch { dao.deleteAll() }
+    fun markResult(id: Long, result: String) =
+        viewModelScope.launch { updateJournalUseCase.markResult(id, result) }
+
+    fun saveNote(id: Long, note: String) =
+        viewModelScope.launch { updateJournalUseCase.saveNote(id, note) }
+
     fun saveExit(id: Long, exit: String, pips: Float) =
-        viewModelScope.launch { dao.saveExit(id, exit, pips) }
+        viewModelScope.launch { updateJournalUseCase.saveExit(id, exit, pips) }
+
+    fun delete(id: Long) =
+        viewModelScope.launch { updateJournalUseCase.delete(id) }
+
+    fun clearAll() =
+        viewModelScope.launch { updateJournalUseCase.deleteAll() }
 }

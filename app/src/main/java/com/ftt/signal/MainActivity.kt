@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.lifecycle.ViewModelProvider
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -27,64 +27,82 @@ import com.ftt.signal.ui.components.PairPickerSheet
 import com.ftt.signal.ui.screens.*
 import com.ftt.signal.ui.theme.*
 import com.ftt.signal.viewmodel.*
+import dagger.hilt.android.AndroidEntryPoint
 
+/**
+ * Single Activity — entry point of the app.
+ *
+ * @AndroidEntryPoint enables Hilt injection in this Activity.
+ * ViewModels are created via [hiltViewModel] in the composable tree,
+ * so no manual ViewModelProvider calls are needed.
+ */
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private val reqNotif = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
+    private val requestNotifPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* handled silently */ }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        // Keep screen on while the signal dashboard is visible
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        // Request POST_NOTIFICATIONS on Android 13+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
-        ) reqNotif.launch(Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            requestNotifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
 
         enableEdgeToEdge()
-
-        val sigVm = ViewModelProvider(this)[SignalViewModel::class.java]
-        val jrnVm = ViewModelProvider(this)[JournalViewModel::class.java]
-        val wlVm  = ViewModelProvider(this)[WatchlistViewModel::class.java]
-        val notif = NotificationHelper(this)
-
-        setContent {
-            FttTheme { FttApp(sigVm, jrnVm, wlVm, notif) }
-        }
+        setContent { FttTheme { FttApp() } }
     }
 }
 
+// ── Root composable ──────────────────────────────────────────
+
 @Composable
-fun FttApp(sigVm: SignalViewModel, jrnVm: JournalViewModel, wlVm: WatchlistViewModel, notif: NotificationHelper) {
-    val nav         = rememberNavController()
-    val sigState    by sigVm.state.collectAsStateWithLifecycle()
-    val curPair     by sigVm.curPair.collectAsStateWithLifecycle()
-    val soundOn     by sigVm.soundOn.collectAsStateWithLifecycle()
-    val slPips      by sigVm.slPips.collectAsStateWithLifecycle()
-    val tpPips      by sigVm.tpPips.collectAsStateWithLifecycle()
-    val apiBase     by sigVm.apiBase.collectAsStateWithLifecycle()
-    val otcBase     by sigVm.otcApiBase.collectAsStateWithLifecycle()
-    val journals    by jrnVm.allEntries.collectAsStateWithLifecycle()
-    val wlState     by wlVm.state.collectAsStateWithLifecycle()
-    val prefs       = remember { com.ftt.signal.prefs.AppPrefs(sigVm.getApplication()) }
-    val lotSize     by prefs.lotSize.collectAsStateWithLifecycle(initialValue = 0.1f)
-    val pipValue    by prefs.pipValue.collectAsStateWithLifecycle(initialValue = 10f)
-    var showPicker  by remember { mutableStateOf(false) }
+fun FttApp() {
+    // hiltViewModel() creates or retrieves the scoped ViewModel from
+    // the Hilt component — no ViewModelProvider needed
+    val sigVm: SignalViewModel    = hiltViewModel()
+    val jrnVm: JournalViewModel   = hiltViewModel()
+    val wlVm:  WatchlistViewModel = hiltViewModel()
 
-    val tabs = listOf("signal" to "\uD83D\uDCCA", "tf" to "\uD83D\uDCD0", "journal" to "\uD83D\uDCD3",
-                      "watchlist" to "\uD83D\uDC41", "analytics" to "\uD83D\uDCC8")
+    val nav          = rememberNavController()
+    val sigState     by sigVm.state.collectAsStateWithLifecycle()
+    val curPair      by sigVm.curPair.collectAsStateWithLifecycle()
+    val soundOn      by sigVm.soundOn.collectAsStateWithLifecycle()
+    val slPips       by sigVm.slPips.collectAsStateWithLifecycle()
+    val tpPips       by sigVm.tpPips.collectAsStateWithLifecycle()
+    val apiBase      by sigVm.apiBase.collectAsStateWithLifecycle()
+    val otcBase      by sigVm.otcApiBase.collectAsStateWithLifecycle()
+    val journals     by jrnVm.allEntries.collectAsStateWithLifecycle()
+    val wlState      by wlVm.state.collectAsStateWithLifecycle()
+    val prefs        = remember { com.ftt.signal.prefs.AppPrefs(androidx.compose.ui.platform.LocalContext.current) }
+    val lotSize      by prefs.lotSize.collectAsStateWithLifecycle(initialValue = 0.1f)
+    val pipValue     by prefs.pipValue.collectAsStateWithLifecycle(initialValue = 10f)
+    var showPicker   by remember { mutableStateOf(false) }
 
-    // Notify on new signal
-    LaunchedEffect(sigState.signal?.timestamp) {
-        val sig = sigState.signal ?: return@LaunchedEffect
-        if (!sigState.isCached && (sig.label == "BUY" || sig.label == "SELL"))
-            notif.notifySignal(sig.symbol, sig.label, sig.grade)
-    }
+    val tabs = listOf(
+        "signal"    to "\uD83D\uDCCA",
+        "tf"        to "\uD83D\uDCD0",
+        "journal"   to "\uD83D\uDCD3",
+        "watchlist" to "\uD83D\uDC41",
+        "analytics" to "\uD83D\uDCC8",
+    )
 
     Scaffold(
         containerColor = Bg,
         bottomBar = {
-            NavigationBar(containerColor = S2, tonalElevation = 0.dp, modifier = Modifier.height(64.dp)) {
+            NavigationBar(
+                containerColor  = S2,
+                tonalElevation  = 0.dp,
+                modifier        = Modifier.height(64.dp),
+            ) {
                 val back by nav.currentBackStackEntryAsState()
                 val cur  = back?.destination
                 tabs.forEach { (route, icon) ->
@@ -96,20 +114,31 @@ fun FttApp(sigVm: SignalViewModel, jrnVm: JournalViewModel, wlVm: WatchlistViewM
                         onClick  = {
                             nav.navigate(route) {
                                 popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true; restoreState = true
+                                launchSingleTop = true
+                                restoreState    = true
                             }
                         },
                         icon  = {
-                            BadgedBox(badge = { if (badge > 0) Badge { Text("$badge", fontSize = 8.sp) } }) {
+                            BadgedBox(badge = {
+                                if (badge > 0) Badge { Text("$badge", fontSize = 8.sp) }
+                            }) {
                                 Text(icon, fontSize = 18.sp)
                             }
                         },
-                        label  = { Text(label, fontSize = 10.sp,
-                            fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal) },
+                        label  = {
+                            Text(
+                                label,
+                                fontSize   = 10.sp,
+                                fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
+                            )
+                        },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Accent, selectedTextColor = Accent,
-                            unselectedIconColor = T3, unselectedTextColor = T3,
-                            indicatorColor = AccentDim),
+                            selectedIconColor   = Accent,
+                            selectedTextColor   = Accent,
+                            unselectedIconColor = T3,
+                            unselectedTextColor = T3,
+                            indicatorColor      = AccentDim,
+                        ),
                     )
                 }
             }
@@ -119,49 +148,75 @@ fun FttApp(sigVm: SignalViewModel, jrnVm: JournalViewModel, wlVm: WatchlistViewM
             NavHost(nav, startDestination = "signal") {
                 composable("signal") {
                     SignalScreen(
-                        state = sigState, curPair = curPair, slPips = slPips, tpPips = tpPips,
-                        soundOn = soundOn,
-                        onRefresh = { sigVm.fetchSignal(forceRefresh = true) },
-                        onToggleSound = sigVm::toggleSound,
-                        onSaveSLTP = sigVm::saveSLTP,
+                        state          = sigState,
+                        curPair        = curPair,
+                        slPips         = slPips,
+                        tpPips         = tpPips,
+                        soundOn        = soundOn,
+                        onRefresh      = { sigVm.fetchSignal(forceRefresh = true) },
+                        onToggleSound  = sigVm::toggleSound,
+                        onSaveSLTP     = sigVm::saveSLTP,
                         onOpenSettings = { nav.navigate("settings") },
-                        calcSLTP = sigVm::calcSLTP,
+                        calcSLTP       = sigVm::calcSLTP,
                     )
                 }
-                composable("tf")        { TfScreen(signal = sigState.signal) }
-                composable("journal")   {
-                    JournalScreen(journals, jrnVm::markResult, jrnVm::delete, jrnVm::saveNote, jrnVm::clearAll)
+                composable("tf") {
+                    TfScreen(signal = sigState.signal)
+                }
+                composable("journal") {
+                    JournalScreen(
+                        journals,
+                        jrnVm::markResult,
+                        jrnVm::delete,
+                        jrnVm::saveNote,
+                        jrnVm::clearAll,
+                    )
                 }
                 composable("watchlist") {
                     WatchlistScreen(
-                        state = wlState, onToggleScan = wlVm::toggleScan, onRunScan = wlVm::runScan,
-                        onAddPair = wlVm::addPair, onRemovePair = wlVm::removePair,
-                        onSetInterval = wlVm::setInterval, onSetFilter = wlVm::setFilter,
-                        onSetSort = wlVm::setSort,
-                        onPairClick = { pair ->
+                        state         = wlState,
+                        onToggleScan  = wlVm::toggleScan,
+                        onRunScan     = wlVm::runScan,
+                        onAddPair     = wlVm::addPair,
+                        onRemovePair  = wlVm::removePair,
+                        onSetInterval = wlVm::setInterval,
+                        onSetFilter   = wlVm::setFilter,
+                        onSetSort     = wlVm::setSort,
+                        onPairClick   = { pair ->
                             sigVm.selectPair(pair)
                             nav.navigate("signal") {
                                 popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true; restoreState = true
+                                launchSingleTop = true
+                                restoreState    = true
                             }
                         },
-                        onAddToJournal = wlVm::addToJournal,
+                        onAddToJournal  = wlVm::addToJournal,
                         onClearNewCount = wlVm::clearNewCount,
                     )
                 }
                 composable("analytics") {
                     AnalyticsScreen(
-                        entries = journals, lotSize = lotSize, pipValue = pipValue,
-                        onSavePL = sigVm::saveLotPip // <-- THE FIX IS HERE
+                        entries    = journals,
+                        lotSize    = lotSize,
+                        pipValue   = pipValue,
+                        onSavePL   = sigVm::saveLotPip,
                     )
                 }
                 composable("settings") {
-                    SettingsScreen(apiBase = apiBase, otcApiBase = otcBase, onSave = sigVm::saveApiSettings)
+                    SettingsScreen(
+                        apiBase    = apiBase,
+                        otcApiBase = otcBase,
+                        onSave     = sigVm::saveApiSettings,
+                    )
                 }
             }
 
             if (showPicker) {
-                PairPickerSheet(currentPair = curPair, onSelect = { sigVm.selectPair(it) }, onDismiss = { showPicker = false })
+                PairPickerSheet(
+                    currentPair = curPair,
+                    onSelect    = { sigVm.selectPair(it) },
+                    onDismiss   = { showPicker = false },
+                )
             }
         }
     }
