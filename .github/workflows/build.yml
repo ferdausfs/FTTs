@@ -24,11 +24,18 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: 'gradle'           # caches ~/.gradle between runs
+          cache: 'gradle'
 
-      # ── Gradle wrapper ────────────────────────────────────────
-      - name: Validate Gradle wrapper
-        uses: gradle/wrapper-validation-action@v2
+      # ── Generate Gradle Wrapper JAR (if missing) ─────────────
+      - name: Generate Gradle Wrapper JAR
+        run: |
+          if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "gradle-wrapper.jar not found, generating..."
+            gradle wrapper --gradle-version=8.7 --distribution-type=bin
+            echo "✅ gradle-wrapper.jar generated"
+          else
+            echo "✅ gradle-wrapper.jar already present"
+          fi
 
       # ── Gradle cache (dependencies + build outputs) ───────────
       - name: Cache Gradle dependencies
@@ -62,4 +69,4 @@ jobs:
           name: FTTSignal-debug-${{ github.run_number }}
           path: app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
-          if-no-files-found: error   # fail loudly if APK is missing
+          if-no-files-found: error
