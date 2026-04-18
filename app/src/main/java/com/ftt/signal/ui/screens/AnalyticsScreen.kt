@@ -138,7 +138,8 @@ fun AnalyticsScreen(
             }
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                PlBox("Est P&L", "${if(estPL>=0)"+""else""}${String.format("%.2f",estPL)}$",
+                val plSign = if (estPL >= 0) "+" else ""
+                PlBox("Est P&L", "$plSign${String.format("%.2f", estPL)}$",
                     if (estPL >= 0) BuyGreen else SellRed)
                 PlBox("Win Pips", "+${String.format("%.1f",winPips)}", BuyGreen)
                 PlBox("Loss Pips", "${String.format("%.1f",lossPips)}", SellRed)

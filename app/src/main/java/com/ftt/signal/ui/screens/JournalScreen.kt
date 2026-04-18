@@ -214,8 +214,11 @@ private fun JournalCard(
                 Text("Session: ${e.session}", fontSize = 10.sp, color = T3)
                 Text("Expiry: ${e.expiryMinutes}m", fontSize = 10.sp, color = T3)
                 e.exitPrice?.let { Text("Exit: $it", fontSize = 10.sp, color = T2) }
-                e.pips?.let { Text("${if(it>=0)"+""else""}${String.format("%.1f",it)}p", fontSize = 10.sp,
-                    color = if (it >= 0) BuyGreen else SellRed) }
+                e.pips?.let { pips ->
+                    val pipSign = if (pips >= 0) "+" else ""
+                    Text("$pipSign${String.format("%.1f", pips)}p", fontSize = 10.sp,
+                        color = if (pips >= 0) BuyGreen else SellRed)
+                }
             }
             Spacer(Modifier.height(8.dp))
             // Note
