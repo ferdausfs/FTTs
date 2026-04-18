@@ -14,11 +14,9 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # ── Checkout ──────────────────────────────────────────────
       - name: Checkout source
         uses: actions/checkout@v4
 
-      # ── JDK ───────────────────────────────────────────────────
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -26,22 +24,19 @@ jobs:
           distribution: 'temurin'
           cache: 'gradle'
 
-      # ── Download Gradle Wrapper JAR (if missing) ──────────────
-      # Direct download avoids running `gradle wrapper` which would
-      # evaluate the project with the system Gradle (9.x) and fail.
+      # Download jar directly — avoids running `gradle wrapper` which
+      # evaluates the project with the system Gradle and fails on AGP compat.
       - name: Download Gradle Wrapper JAR
         run: |
           if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then
-            echo "gradle-wrapper.jar not found, downloading..."
             curl -sL \
               "https://github.com/gradle/gradle/raw/v8.7.0/gradle/wrapper/gradle-wrapper.jar" \
               -o gradle/wrapper/gradle-wrapper.jar
-            echo "✅ gradle-wrapper.jar downloaded ($(du -sh gradle/wrapper/gradle-wrapper.jar | cut -f1))"
+            echo "✅ Downloaded gradle-wrapper.jar"
           else
-            echo "✅ gradle-wrapper.jar already present"
+            echo "✅ Already present"
           fi
 
-      # ── Gradle cache ──────────────────────────────────────────
       - name: Cache Gradle dependencies
         uses: actions/cache@v4
         with:
@@ -52,21 +47,14 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
-      # ── Permissions ───────────────────────────────────────────
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      # ── Build ─────────────────────────────────────────────────
       - name: Build Debug APK
-        run: ./gradlew :app:assembleDebug
-               --no-daemon
-               --build-cache
-               --parallel
-               --stacktrace
+        run: ./gradlew :app:assembleDebug --no-daemon --build-cache --parallel --stacktrace
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2g -Dorg.gradle.daemon=false"
 
-      # ── Upload artifact ───────────────────────────────────────
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:

@@ -374,10 +374,12 @@ private fun SLTPWidget(
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.weight(1f),
-                Modifier.clip(RoundedCornerShape(8.dp)).background(SellRedDim)
+            Column(
+                Modifier.weight(1f)
+                    .clip(RoundedCornerShape(8.dp)).background(SellRedDim)
                     .border(1.dp, SellRed.copy(0.3f), RoundedCornerShape(8.dp))
-                    .padding(10.dp)) {
+                    .padding(10.dp)
+            ) {
                 Text("Stop Loss", fontSize = 10.sp, color = T3)
                 Text(calc?.first ?: "—", fontSize = 13.sp, fontWeight = FontWeight.Bold,
                     color = SellRed, fontFamily = FontFamily.Monospace)
@@ -385,10 +387,12 @@ private fun SLTPWidget(
             }
             Text(if (dir == "BUY") "▲" else "▼", fontSize = 20.sp, color = signalColor(dir),
                 modifier = Modifier.align(Alignment.CenterVertically))
-            Column(Modifier.weight(1f),
-                Modifier.clip(RoundedCornerShape(8.dp)).background(BuyGreenDim)
+            Column(
+                Modifier.weight(1f)
+                    .clip(RoundedCornerShape(8.dp)).background(BuyGreenDim)
                     .border(1.dp, BuyGreen.copy(0.3f), RoundedCornerShape(8.dp))
-                    .padding(10.dp)) {
+                    .padding(10.dp)
+            ) {
                 Text("Take Profit", fontSize = 10.sp, color = T3)
                 Text(calc?.second ?: "—", fontSize = 13.sp, fontWeight = FontWeight.Bold,
                     color = BuyGreen, fontFamily = FontFamily.Monospace)
