@@ -97,7 +97,8 @@ fun AnalyticsScreen(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 StreakBox(streak, streakType)
                 StatTile("Closed", "${closed.size}", T1)
-                StatTile("Avg Pip", "${if(avgPip>=0)"+"else"""}${String.format("%.1f",avgPip)}",
+                val avgSign = if (avgPip >= 0) "+" else ""
+                StatTile("Avg Pip", "$avgSign${String.format("%.1f", avgPip)}",
                     if (avgPip >= 0) BuyGreen else SellRed)
             }
         }
@@ -168,7 +169,8 @@ fun AnalyticsScreen(
                         Text(sess, fontSize = 12.sp, color = T2, modifier = Modifier.width(80.dp))
                         Column(Modifier.weight(1f)) {
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("$tot trades${if(sWr != null) " · $sWr% WR" else ""}",
+                                val wrLabel = if (sWr != null) " · $sWr% WR" else ""
+                                Text("$tot trades$wrLabel",
                                     fontSize = 10.sp, color = T3)
                             }
                             Spacer(Modifier.height(3.dp))

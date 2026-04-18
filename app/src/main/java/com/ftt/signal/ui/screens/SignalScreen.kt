@@ -249,7 +249,8 @@ private fun SignalCard(
                         val tsdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
                         tsdf.format(sdf.parse(sig.timestamp) ?: java.util.Date())
                     } catch (e: Exception) { "" }
-                    Text("$ts${if(sig.grade.isNotEmpty()) " · Grade ${sig.grade}" else ""}",
+                    val gradeLabel = if (sig.grade.isNotEmpty()) " · Grade ${sig.grade}" else ""
+                    Text("$ts$gradeLabel",
                         fontSize = 12.sp, color = T3)
                 }
             }

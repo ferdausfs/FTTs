@@ -456,7 +456,8 @@ private fun JournalMonthly(entries: List<JournalEntry>) {
                     StatBox("Total", "${w+l}", T1)
                     StatBox("Wins", "$w", BuyGreen)
                     StatBox("Losses", "$l", SellRed)
-                    StatBox("Pips", "${if(pips>=0)"+" else ""}${String.format("%.1f",pips)}",
+                    val pipsSign = if (pips >= 0) "+" else ""
+                    StatBox("Pips", "$pipsSign${String.format("%.1f", pips)}",
                         if (pips >= 0) BuyGreen else SellRed)
                 }
                 Spacer(Modifier.height(8.dp))
