@@ -4,10 +4,14 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.unit.*
@@ -276,11 +280,11 @@ private fun WlCard(
                         Text("✕", fontSize = 12.sp, color = T3) }
                 }
                 result?.timestamp?.takeIf { it.isNotEmpty() }?.let {
-                    try {
-                        val ts = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+                    val ts = try {
+                        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
                             .format(java.util.Date(java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).parse(it)!!.time))
-                        Text(ts, fontSize = 9.sp, color = T3, fontFamily = FontFamily.Monospace)
-                    } catch (e: Exception) {}
+                    } catch (e: Exception) { null }
+                    if (ts != null) Text(ts, fontSize = 9.sp, color = T3, fontFamily = FontFamily.Monospace)
                 }
             }
         }
@@ -330,13 +334,13 @@ private fun PairAddSheet(
                     focusedBorderColor = Accent, unfocusedBorderColor = com.ftt.signal.ui.theme.Divider,
                     focusedTextColor = T1, unfocusedTextColor = T1))
             Spacer(Modifier.height(10.dp))
-            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(3),
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
                 modifier = Modifier.heightIn(max = 340.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                androidx.compose.foundation.lazy.grid.items(filtered) { pair ->
+                items(filtered) { pair ->
                     val inList = existing.contains(pair)
                     Box(
                         Modifier.clip(RoundedCornerShape(8.dp))

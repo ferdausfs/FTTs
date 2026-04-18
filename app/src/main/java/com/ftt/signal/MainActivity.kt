@@ -82,7 +82,8 @@ fun FttApp() {
     val otcBase      by sigVm.otcApiBase.collectAsStateWithLifecycle()
     val journals     by jrnVm.allEntries.collectAsStateWithLifecycle()
     val wlState      by wlVm.state.collectAsStateWithLifecycle()
-    val prefs        = remember { com.ftt.signal.prefs.AppPrefs(androidx.compose.ui.platform.LocalContext.current) }
+    val context      = androidx.compose.ui.platform.LocalContext.current
+    val prefs        = remember(context) { com.ftt.signal.prefs.AppPrefs(context) }
     val lotSize      by prefs.lotSize.collectAsStateWithLifecycle(initialValue = 0.1f)
     val pipValue     by prefs.pipValue.collectAsStateWithLifecycle(initialValue = 10f)
     var showPicker   by remember { mutableStateOf(false) }

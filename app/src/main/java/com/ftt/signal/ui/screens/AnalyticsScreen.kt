@@ -97,7 +97,7 @@ fun AnalyticsScreen(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 StreakBox(streak, streakType)
                 StatTile("Closed", "${closed.size}", T1)
-                StatTile("Avg Pip", "${if(avgPip>=0)"+"}${String.format("%.1f",avgPip)}",
+                StatTile("Avg Pip", "${if(avgPip>=0)"+"else"""}${String.format("%.1f",avgPip)}",
                     if (avgPip >= 0) BuyGreen else SellRed)
             }
         }
@@ -138,7 +138,7 @@ fun AnalyticsScreen(
             }
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                PlBox("Est P&L", "${if(estPL>=0)"+"}${String.format("%.2f",estPL)}$",
+                PlBox("Est P&L", "${if(estPL>=0)"+""else""}${String.format("%.2f",estPL)}$",
                     if (estPL >= 0) BuyGreen else SellRed)
                 PlBox("Win Pips", "+${String.format("%.1f",winPips)}", BuyGreen)
                 PlBox("Loss Pips", "${String.format("%.1f",lossPips)}", SellRed)
